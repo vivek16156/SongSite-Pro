@@ -1,82 +1,78 @@
 """
-SongSite Pro — Professional Music Streaming (Local Downloads) with polished 3D UI.
+SongSite Pro — Fully local music streaming (no YouTube) with pro UI.
 
 Features:
-- Search, play, download local songs
-- Song suggestions
-- Popular songs ranking
-- Admin reset
-- Polished professional UI
+- Stream your uploaded songs directly
+- Download songs if available
+- Search songs by title or artist
+- Sticky now-playing player
+- Beautiful, responsive, dark-themed UI
 """
 
-from flask import (
-    Flask, request, render_template_string, send_from_directory,
-    redirect, url_for, abort
-)
-import os
+from flask import Flask, request, render_template_string, send_from_directory, abort
 from pathlib import Path
+import os
 
 # ---------- CONFIG ----------
 BASE_DIR = Path.cwd()
-DOWNLOADS_DIR = BASE_DIR / "downloads"
-DOWNLOADS_DIR.mkdir(exist_ok=True)
+SONGS_DIR = BASE_DIR / "songs"
+SONGS_DIR.mkdir(exist_ok=True)
 
-# Downloadable songs (key -> file path)
+# Map song names to files for download
 DOWNLOADABLE_MAP = {
     # Example:
-    # "song1": "downloads/song1.mp3",
-    # "song2": "downloads/song2.mp3"
+    # "Arijit Singh Song": "songs/arijit_song.mp3"
 }
+# You can populate DOWNLOADABLE_MAP automatically:
+for file in SONGS_DIR.glob("*.*"):
+    DOWNLOADABLE_MAP[file.stem] = str(file)
 
-# Popularity map (song_key -> play count)
-POPULARITY_MAP = {}
-
-ADMIN_KEY = os.getenv("ADMIN_KEY", "admin-secret")
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET", "dev-secret-key")
 
-# ---------- UTILITIES ----------
-def add_popularity(song_key):
-    POPULARITY_MAP[song_key] = POPULARITY_MAP.get(song_key, 0) + 1
-
-# ---------- HTML TEMPLATE ----------
+# ---------- TEMPLATE ----------
 BASE_HTML = r"""
 <!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>SongSite Pro</title>
+<title>SongSite Pro - Stream Songs</title>
 <style>
 :root{
-  --bg:#0f0f12; --card:#1c1c24; --accent:#ff3b6b; --muted:#9aa0a6;
-  --glass: rgba(255,255,255,0.05); --font:'Inter',sans-serif;
+  --bg:#0f0f12; --card:#151519; --accent:#ff3b6b; --muted:#9aa0a6;
+  --glass: rgba(255,255,255,0.03);
 }
-body{margin:0;font-family:var(--font);background:linear-gradient(180deg,#0c0c10 0%,#15151a 100%);color:#eef1f6;min-height:100vh;}
-.container{max-width:1200px;margin:0 auto;padding:20px;}
-.header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;}
-.brand h1{color:var(--accent);margin:0;font-size:2rem;}
-.brand p{color:var(--muted);margin:0;font-size:0.95rem;}
-.controls{display:flex;gap:10px;flex-wrap:wrap;}
-.search{display:flex;gap:8px;flex:1;max-width:720px;}
-input.searchbox{flex:1;padding:12px;border-radius:12px;border:none;background:var(--glass);color:#fff;}
-button.btn{background:linear-gradient(90deg,var(--accent),#ff7a9a);border:none;padding:12px 18px;border-radius:12px;color:#fff;font-weight:700;cursor:pointer;transition:0.3s;}
-button.btn:hover{opacity:0.85;}
-.small{padding:8px 12px;border-radius:8px;background:#1a1a24;border:1px solid rgba(255,255,255,0.03);cursor:pointer;color:var(--muted);}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;margin-top:18px;}
-.card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:16px;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.02);}
-.card:hover{transform:translateY(-2px);transition:0.2s;}
-.song-title{font-weight:700;margin:0 0 6px 0;font-size:1rem;}
-.song-sub{color:var(--muted);font-size:0.9rem;margin:0;}
-.player{position:sticky;top:12px;padding:16px;border-radius:12px;background:linear-gradient(90deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));display:flex;gap:12px;align-items:center;}
-.play-info{min-width:0;}
-.play-title{font-weight:700;margin:0;}
-.play-artist{color:var(--muted);font-size:0.9rem;margin:0;}
-.play-buttons{display:flex;gap:8px;margin-left:auto;}
-.play-btn{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:8px;border-radius:10px;color:#fff;cursor:pointer;}
-.footer{margin:28px 0;text-align:center;color:var(--muted);font-size:0.9rem;line-height:1.6;}
-.admin-reset{background:#c53030;}
-@media(max-width:700px){.player{flex-direction:column;align-items:flex-start;gap:8px}.play-buttons{margin-left:0}}
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:
+linear-gradient(180deg,#070707 0%, #111216 100%);color:#eef1f6;min-height:100vh}
+.container{max-width:1200px;margin:22px auto;padding:0 16px}
+.header{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.brand h1{margin:0;font-size:1.6rem;letter-spacing:0.6px;color:var(--accent)}
+.controls{display:flex;gap:10px;align-items:center}
+.search{display:flex;gap:8px;flex:1;max-width:720px}
+input.searchbox{flex:1;padding:10px 12px;border-radius:10px;border:none;background:var(--glass);color:#fff}
+button.btn{background:linear-gradient(90deg,var(--accent),#ff7a9a);border:none;padding:10px 14px;border-radius:10px;color:#fff;font-weight:600;cursor:pointer}
+.small{padding:8px 10px;border-radius:8px;background:#151515;border:1px solid rgba(255,255,255,0.03);cursor:pointer;color:var(--muted)}
+.card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:16px;padding:14px;box-shadow: 0 10px 30px rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.02)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;margin-top:18px}
+.song-title{font-weight:700;margin:0 0 6px 0}
+.song-sub{color:var(--muted);font-size:0.9rem;margin:0}
+.player{position:sticky;top:12px;padding:12px;border-radius:12px;background:linear-gradient(90deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));display:flex;gap:12px;align-items:center}
+.play-info{min-width:0}
+.play-title{font-weight:700;margin:0}
+.play-artist{color:var(--muted);font-size:0.9rem;margin:0}
+.play-buttons{display:flex;gap:8px;margin-left:auto}
+.play-btn{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:8px;border-radius:10px;color:#fff;cursor:pointer}
+.resp-iframe{width:100%;height:0;padding-bottom:56.25%;position:relative;overflow:hidden;border-radius:10px}
+.resp-iframe audio{position:absolute;top:0;left:0;width:100%;height:100%;border-radius:10px}
+.footer{margin:28px 0;text-align:center;color:var(--muted);font-size:0.9rem}
+.badge{background:rgba(255,255,255,0.03);padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.02);font-size:0.9rem;color:var(--muted)}
+.admin-reset{background:#c53030}
+@media(max-width:700px){
+  .player{flex-direction:column;align-items:flex-start;gap:8px}
+  .play-buttons{margin-left:0}
+}
 </style>
 </head>
 <body>
@@ -84,41 +80,35 @@ button.btn:hover{opacity:0.85;}
   <div class="header">
     <div class="brand">
       <h1>SongSite Pro</h1>
-      <p>Professional Music Streaming — Search, Play, Download & Discover Popular Tracks</p>
+      <div style="color:var(--muted);font-size:0.95rem">Stream your own music — professional UI</div>
     </div>
     <div class="controls">
-      <form method="get" action="/" class="search">
-        <input class="searchbox" type="search" name="q" placeholder="Search songs or artists..." value="{{ q|default('') }}">
+      <form method="get" action="/" class="search" style="display:flex;">
+        <input class="searchbox" type="search" name="q" placeholder="Search songs or artist" value="{{ q|default('') }}">
         <button class="btn" type="submit">Search</button>
       </form>
-      <form method="post" action="/reset">
-        <input type="hidden" name="admin_key" value="">
-        <button class="small admin-reset">Admin Reset</button>
-      </form>
     </div>
   </div>
 
-  <!-- Sticky Player -->
-  <div class="card player" style="margin-top:20px;">
-    <div style="width:64px;height:64px;background:linear-gradient(135deg,var(--accent),#ff7a9a);border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:700">♪</div>
+  <!-- sticky player -->
+  <div style="margin-top:18px" class="card player">
+    <audio id="audio-player" controls style="width:100%;"></audio>
     <div class="play-info">
       <div class="play-title" id="now-title">Nothing playing</div>
-      <div class="play-artist" id="now-artist">Search and play a song</div>
-    </div>
-    <div class="play-buttons">
-      <button class="play-btn" id="play-pause">Play</button>
-      <button class="play-btn" id="stop-btn">Stop</button>
+      <div class="play-artist" id="now-artist">Select a song to play</div>
     </div>
   </div>
 
-  <!-- Song Results -->
+  <!-- results grid -->
   {% if results %}
   <div class="grid">
     {% for r in results %}
     <div class="card">
       <div class="song-title">{{ r.title }}</div>
       <div class="song-sub">{{ r.artist }}</div>
-      {% if r.download_key and r.download_key in downloadable %}
+      <div style="height:12px"></div>
+      <button class="small" onclick="playSong('{{ r.file_url }}','{{ r.title|e }}','{{ r.artist|e }}')">Play</button>
+      {% if r.download_key %}
       <a class="small" href="{{ url_for('download_file', key=r.download_key) }}">Download</a>
       {% endif %}
     </div>
@@ -128,30 +118,29 @@ button.btn:hover{opacity:0.85;}
   <div class="card" style="margin-top:18px">No results for "<strong>{{ q }}</strong>"</div>
   {% endif %}
 
-  <!-- Popular Songs -->
-  <div class="card" style="margin-top:24px;">
-    <h2>Popular Tracks</h2>
-    {% if popularity %}
-    <ol>
-      {% for song, count in popularity %}
-      <li>{{ song }} — {{ count }} plays</li>
-      {% endfor %}
-    </ol>
-    {% else %}
-    <p>No popular tracks yet. Play songs to build popularity rankings!</p>
-    {% endif %}
+  <!-- all songs by popularity (just sorted by name for now) -->
+  <h2 style="margin-top:24px;">All Songs</h2>
+  <div class="grid">
+    {% for title, file in all_songs.items() %}
+    <div class="card">
+      <div class="song-title">{{ title }}</div>
+      <button class="small" onclick="playSong('{{ file }}','{{ title }}','')">Play</button>
+      <a class="small" href="{{ url_for('download_file', key=title) }}">Download</a>
+    </div>
+    {% endfor %}
   </div>
 
-  <!-- Footer -->
-  <div class="footer">
-    SongSite Pro is a polished, professional music platform. All features are optimized
-    for smooth performance, aesthetic design, and maximum usability. Enjoy your music in style!
-  </div>
+  <div class="footer">Built with ❤️ — SongSite Pro</div>
 </div>
 
 <script>
-document.getElementById('play-pause').addEventListener('click', ()=>{alert("Play/Pause not implemented in demo")});
-document.getElementById('stop-btn').addEventListener('click', ()=>{alert("Stop not implemented in demo")});
+const audioPlayer = document.getElementById('audio-player');
+function playSong(url, title, artist){
+  audioPlayer.src = url;
+  audioPlayer.play();
+  document.getElementById('now-title').textContent = title;
+  document.getElementById('now-artist').textContent = artist;
+}
 </script>
 </body>
 </html>
@@ -162,13 +151,12 @@ document.getElementById('stop-btn').addEventListener('click', ()=>{alert("Stop n
 def index():
     q = (request.args.get("q") or "").strip()
     results = []
-    if q:
-        for key, path in DOWNLOADABLE_MAP.items():
-            if q.lower() in key.lower():
-                results.append({"title": key, "artist": "Unknown", "download_key": key})
-                add_popularity(key)
-    sorted_popularity = sorted(POPULARITY_MAP.items(), key=lambda x: x[1], reverse=True)
-    return render_template_string(BASE_HTML, results=results, q=q, downloadable=DOWNLOADABLE_MAP, popularity=sorted_popularity)
+    for title, file in DOWNLOADABLE_MAP.items():
+        if not q or q.lower() in title.lower():
+            results.append({"title": title, "artist": "", "file_url": file, "download_key": title})
+    # Sort alphabetically or by "popularity"
+    all_songs = dict(sorted(DOWNLOADABLE_MAP.items()))
+    return render_template_string(BASE_HTML, results=results, q=q, all_songs=all_songs)
 
 @app.route("/download/<key>")
 def download_file(key):
@@ -178,20 +166,6 @@ def download_file(key):
     if not path.exists():
         abort(404)
     return send_from_directory(str(path.parent), path.name, as_attachment=True)
-
-@app.route("/reset", methods=["POST"])
-def reset_site():
-    form_key = request.form.get("admin_key", "")
-    if ADMIN_KEY and form_key != ADMIN_KEY:
-        abort(403, "Admin key required to reset site.")
-    for f in DOWNLOADS_DIR.glob("*"):
-        try:
-            f.unlink()
-        except Exception:
-            pass
-    DOWNLOADABLE_MAP.clear()
-    POPULARITY_MAP.clear()
-    return redirect(url_for("index"))
 
 # ---------- RUN ----------
 if __name__ == "__main__":
