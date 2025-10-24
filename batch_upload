@@ -1,0 +1,54 @@
+import os
+import sqlite3
+import datetime
+from pathlib import Path
+from werkzeug.utils import secure_filename
+
+# --- CONFIG ---
+BASE_DIR = Path.cwd()  # Make sure you run this in FlaskSongSite folder
+SONGS_DIR = BASE_DIR / "songs"
+DB_PATH = BASE_DIR / "songs.db"
+ALLOWED_EXTENSIONS = {"mp3", "wav", "m4a", "ogg", "flac"}
+
+SONGS_DIR.mkdir(parents=True, exist_ok=True)
+
+# --- HELPERS ---
+def allowed_file(filename):
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def insert_song(filename, title=None, artist=None):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        "INSERT OR IGNORE INTO songs (filename, title, artist, uploaded_at) VALUES (?, ?, ?, ?)",
+        (filename, title or "", artist or "", datetime.datetime.utcnow().isoformat())
+    )
+    conn.commit()
+    conn.close()
+
+# --- BATCH UPLOAD ---
+source_folder = input("Enter full path of your songs folder: ").strip()
+source_path = Path(source_folder)
+
+if not source_path.exists():
+    print("Folder does not exist!")
+    exit()
+
+count = 0
+for file_path in source_path.iterdir():
+    if file_path.is_file() and allowed_file(file_path.name):
+        filename = secure_filename(file_path.name)
+        dest_path = SONGS_DIR / filename
+        base, ext = os.path.splitext(filename)
+        counter = 1
+        while dest_path.exists():
+            filename = f"{base}({counter}){ext}"
+            dest_path = SONGS_DIR / filename
+            counter += 1
+        # Copy file to songs folder
+        dest_path.write_bytes(file_path.read_bytes())
+        # Insert into database
+        insert_song(filename)
+        count += 1
+
+print(f"✅ Uploaded {count} songs to your site!")
